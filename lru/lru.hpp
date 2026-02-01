@@ -5,6 +5,10 @@
 #include "exceptions.hpp"
 #include "class-integer.hpp"
 #include "class-matrix.hpp"
+#include <vector>
+#include <memory>
+#include <cstddef>
+
 class Hash {
 public:
 	unsigned int operator () (Integer lhs) const {
@@ -20,442 +24,481 @@ public:
 };
 
 namespace sjtu {
-template<class T> class double_list{
+template <typename T>
+class double_list {
+private:
+    struct Node {
+        std::shared_ptr<T> data;
+        Node* pre;
+        Node* nxt;
+        Node(const T& val)
+            : data(std::make_shared<T>(val)), pre(nullptr), nxt(nullptr) {}
+    };
+
+    Node* head;
+    Node* tail;
+    std::size_t size_;
+
 public:
-	/**
-	 * elements
-	 * add whatever you want
-	*/
+    double_list() : head(nullptr), tail(nullptr), size_(0) {}
 
-// --------------------------
-	/**
-	 * the follows are constructors and destructors
-	 * you can also add some if needed.
-	*/
-	double_list(){
-	}
-	double_list(const double_list<T> &other){
-	}
-	~double_list(){
-	}
+    double_list(const double_list<T>& other) {
+        head = tail = nullptr;
+        Node* cur = other.head;
+        while (cur) {
+            insert_tail(*cur->data);
+            cur = cur->nxt;
+        }
+        size_ = other.size_;
+    }
 
-	class iterator{
-	public:
-    	/**
-		 * elements
-		 * add whatever you want
-		*/
-	    // --------------------------
-        /**
-		 * the follows are constructors and destructors
-		 * you can also add some if needed.
-		*/
-		iterator(){}
-		iterator(const iterator &t){
-		}
-		~iterator(){}
-        /**
-		 * iter++
-		 */
-		iterator operator++(int) {
-		}
-        /**
-		 * ++iter
-		 */
-		iterator &operator++() {
-		}
-        /**
-		 * iter--
-		 */
-		iterator operator--(int) {
-		}
-        /**
-		 * --iter
-		 */
-		iterator &operator--() {
-		}
-		/**
-		 * if the iter didn't point to a value
-		 * throw " invalid"
-		*/
-		T &operator*() const {
-		}
-        /**
-         * other operation
-        */
-		T *operator->() const noexcept {
-		}
-		bool operator==(const iterator &rhs) const {
-    	}
-		bool operator!=(const iterator &rhs) const {
-		}
-	};
-	/**
-	 * return an iterator to the beginning
-	 */
-	iterator begin(){
-	}
-	/**
-	 * return an iterator to the ending
-	 * in fact, it returns the iterator point to nothing,
-	 * just after the last element.
-	 */
-	iterator end(){
-	}
-	/**
-	 * if the iter didn't point to anything, do nothing,
-	 * otherwise, delete the element pointed by the iter
-	 * and return the iterator point at the same "index"
-	 * e.g.
-	 * 	if the origin iterator point at the 2nd element
-	 * 	the returned iterator also point at the
-	 *  2nd element of the list after the operation
-	 *  or nothing if the list after the operation
-	 *  don't contain 2nd elememt.
-	*/
-	iterator erase(iterator pos){
-	}
+    ~double_list() {
+        clear();
+    }
 
-	/**
-	 * the following are operations of double list
-	*/
-	void insert_head(const T &val){
-	}
-	void insert_tail(const T &val){
-	}
-	void delete_head(){
-	}
-	void delete_tail(){
-	}
-	/**
-	 * if didn't contain anything, return true, 
-	 * otherwise false.
-	 */
-	bool empty(){
-	}
+    class iterator {
+    public:
+        Node* current;
+        iterator() : current(nullptr) {}
+        iterator(Node* node) : current(node) {}
+        iterator(const iterator& other) : current(other.current) {}
+        iterator operator++(int) {
+            iterator temp = *this;
+            if (!current) {throw std::out_of_range("Invalid iterator");}
+            current = current->nxt;
+            return temp;
+        }
+        iterator& operator++() {
+            if (!current) {throw std::out_of_range("Invalid iterator");}
+            current = current->nxt;
+            return *this;
+        }
+        iterator operator--(int) {
+            iterator temp = *this;
+            if (!current || !current->pre) {throw std::out_of_range("Invalid iterator");}
+            current = current->pre;
+            return temp;
+        }
+        iterator& operator--() {
+            if (!current || !current->pre) {throw std::out_of_range("Invalid iterator");}
+            current = current->pre;
+            return *this;
+        }
+        T& operator*() const {
+            if (!current) {throw std::out_of_range("Invalid iterator");}
+            return *current->data;
+        }
+        T* operator->() const noexcept {
+            if (!current) {return nullptr;}
+            return current->data.get();
+        }
+
+        bool operator==(const iterator& rhs) const {return current == rhs.current;}
+        bool operator!=(const iterator& rhs) const {return current != rhs.current;}
+    };
+    iterator begin() const {return iterator(head);}
+	iterator get_tail() const{return iterator(tail);}
+    iterator end() const { return iterator(nullptr); }
+
+    iterator erase(iterator pos) {
+        if (!pos.current) { return end();}
+        Node* node_to_delete = pos.current;
+        if (node_to_delete->pre) {
+            node_to_delete->pre->nxt = node_to_delete->nxt;
+        } else {
+            head = node_to_delete->nxt;
+        }
+        if (node_to_delete->nxt) {
+            node_to_delete->nxt->pre = node_to_delete->pre;
+        } else {
+            tail = node_to_delete->pre;
+        }
+        delete node_to_delete;
+        size_--;
+        return iterator(node_to_delete->nxt);
+    }
+
+    iterator insert(iterator pos, const T& value) {
+        Node* new_node = new Node(value);
+        if (!pos.current) {
+            throw std::out_of_range("Invalid iterator");
+        }
+        Node* current = pos.current;
+        if (current->pre) {
+            current->pre->nxt = new_node;
+            new_node->pre = current->pre;
+        } else {
+            head = new_node;
+        }
+        new_node->nxt = current;
+        current->pre = new_node;
+        size_++;
+        return iterator(new_node);
+    }
+
+    void insert_head(const T& value) {
+        Node* new_node = new Node(value);
+        if (!head) {
+            head = tail = new_node;
+        } else {
+            head->pre = new_node;
+            new_node->nxt = head;
+            head = new_node;
+        }
+        size_++;
+    }
+    void insert_tail(const T& value) {
+        Node* new_node = new Node(value);
+        if (!tail) {
+            head = tail = new_node;
+        } else {
+            tail->nxt = new_node;
+            new_node->pre = tail;
+            tail = new_node;
+        }
+        size_++;
+    }
+
+    void delete_head() {
+        if (!head) {
+            return;
+        }
+        Node* node_to_delete = head;
+        head = head->nxt;
+        if (head) {
+            head->pre = nullptr;
+        } else {
+            tail = nullptr;
+        }
+        delete node_to_delete;
+        size_--;
+    }
+    void delete_tail() {
+        if (!tail) {
+            return;
+        }
+        Node* node_to_delete = tail;
+        tail = tail->pre;
+        if (tail) {
+            tail->nxt = nullptr;
+        } else {
+            head = nullptr;
+        }
+        delete node_to_delete;
+        size_--;
+    }
+    bool empty() const {
+        return size_ == 0;
+    }
+    std::size_t size() const {
+        return size_;
+    }
+    void clear() {
+        while (head) {
+            Node* node_to_delete = head;
+            head = head->nxt;
+            delete node_to_delete;
+        }
+        size_ = 0;
+        head = tail = nullptr;
+    }
 };
 
-template<
-	class Key,
-	class T,
-	class Hash = std::hash<Key>, 
-	class Equal = std::equal_to<Key>
-> class hashmap{
+template < class Key, class T, class Hash = std::hash<Key>, class Equal = std::equal_to<Key>>
+class hashmap{
 public:
-	using value_type = pair<const Key, T>;
-	/**
-	 * elements
-	 * add whatever you want
-	*/
+	using value_type = pair<Key, T>;
+private:
+    std::vector<std::vector<value_type>> hash_table;
+    size_t size;
+    Hash hash;
+    Equal equal;
+public:
+	hashmap(): size(0), hash_table(16) {}
+	hashmap(const hashmap &other): size(other.size), hash_table(other.hash_table), hash(other.hash), equal(other.equal) {}
+	~hashmap(){}
 
-// --------------------------
-
-	/**
-	 * the follows are constructors and destructors
-	 * you can also add some if needed.
-	*/
-	hashmap() {
-	}
-	hashmap(const hashmap &other){
-	}
-	~hashmap(){
-	}
 	hashmap & operator=(const hashmap &other){
+		if (this != &other) {
+            hash_table = other.hash_table;
+            size = other.size;
+            hash = other.hash;
+            equal = other.equal;
+        }
+        return *this;
 	}
 
 	class iterator{
+	private:
+        std::vector<std::vector<value_type>>* iterlist;
+        size_t bucket_idx;
+        size_t element_idx;
+		bool is_end;
 	public:
-    	/**
-         * elements
-         * add whatever you want
-        */
-// --------------------------
-        /**
-         * the follows are constructors and destructors
-         * you can also add some if needed.
-        */
-		iterator(){
-		}
-		iterator(const iterator &t){
-		}
+		iterator(std::vector<std::vector<value_type>>* ptr, size_t bidx, size_t eidx, bool is_end = false)
+            : iterlist(ptr), bucket_idx(bidx), element_idx(eidx), is_end(is_end) {}
+		iterator(const iterator &t): iterlist(t.iterlist), bucket_idx(t.bucket_idx), element_idx(t.element_idx), is_end(t.is_end) {}
 		~iterator(){}
 
-        /**
-		 * if point to nothing
-		 * throw 
-		*/
 		value_type &operator*() const {
+			if(this->is_end) throw std::out_of_range("invalid");
+			return (*iterlist)[bucket_idx][element_idx];
 		}
-
-        /**
-		 * other operation
-		*/
 		value_type *operator->() const noexcept {
+			return &((*iterlist)[bucket_idx][element_idx]);
 		}
 		bool operator==(const iterator &rhs) const {
+			if(is_end && rhs.is_end) return true;
+			return (iterlist==rhs.iterlist)&&(bucket_idx==rhs.bucket_idx)&&(element_idx==rhs.element_idx);
     	}
 		bool operator!=(const iterator &rhs) const {
+			return !(*this==rhs);
 		}
 	};
 
 	void clear(){
-	}
-	/**
-	 * you need to expand the hashmap dynamically
-	*/
-	void expand(){
+		for (int i=0;i<hash_table.size();i++) {
+            hash_table[i].clear();
+        }
+        size = 0;
 	}
 
-    /**
-     * the iterator point at nothing
-    */
-	iterator end() const{
+	void expand(){
+		size_t new_size = hash_table.size() * 16;
+        std::vector<std::vector<value_type>> new_hash_table(new_size);
+        for (size_t i = 0; i < hash_table.size(); i++) {
+            for (const auto& item : hash_table[i]) {
+                size_t hash_val = hash(item.first) % new_size;
+                new_hash_table[hash_val].push_back(item);
+            }
+        }
+        hash_table = std::move(new_hash_table);
 	}
-	/**
-	 * find, return a pointer point to the value
-	 * not find, return the end (point to nothing)
-	*/
-	iterator find(const Key &key)const{
+
+	iterator end() {
+		return iterator(&hash_table, hash_table.size(), 0, true);
 	}
-	/**
-	 * already have a value_pair with the same key
-	 * -> just update the value, return false
-	 * not find a value_pair with the same key
-	 * -> insert the value_pair, return true
-	*/
-	sjtu::pair<iterator,bool> insert(const value_type &value_pair){
+	iterator find(const Key &key) {
+		size_t hash_val = hash(key)%hash_table.size();
+		for(int i=0;i<hash_table[hash_val].size();i++)
+			if(equal(hash_table[hash_val][i].first, key))
+				return iterator(&hash_table, hash_val, i, false);
+		return end();
 	}
-	/**
-	 * the value_pair exists, remove and return true
-	 * otherwise, return false
-	*/
+    pair<iterator, bool> insert(const value_type& value_pair) {
+        if (size >= hash_table.size() * 2) expand();
+        size_t hash_val = hash(value_pair.first) % hash_table.size();
+        for (size_t i = 0; i < hash_table[hash_val].size(); i++)
+            if (equal(hash_table[hash_val][i].first, value_pair.first)){
+				hash_table[hash_val][i].second=value_pair.second;
+                return pair(iterator(&hash_table, hash_val, i), false);
+			}
+        hash_table[hash_val].push_back(value_pair);
+        ++size;
+        return pair(iterator(&hash_table, hash_val, hash_table[hash_val].size() - 1, false), true);
+    }
 	bool remove(const Key &key){
+		size_t hash_val = hash(key)%hash_table.size();
+		for(int i=0;i<hash_table[hash_val].size();i++)
+			if(equal(hash_table[hash_val][i].first, key)){
+				hash_table[hash_val].erase(hash_table[hash_val].begin()+i);
+				size--;
+				return true;
+			}
+		return false;
 	}
 };
 
-template<
-	class Key,
-	class T,
-	class Hash = std::hash<Key>, 
-	class Equal = std::equal_to<Key>
-> class linked_hashmap :public hashmap<Key,T,Hash,Equal>{
+template<class Key, class T, class Hash = std::hash<Key>, class Equal = std::equal_to<Key>>
+class linked_hashmap {
 public:
-	typedef pair<const Key, T> value_type;
-	/**
-	 * elements
-	 * add whatever you want
-	*/
-// --------------------------
+	typedef pair<Key, T> value_type;
+private:
+	double_list<value_type> linked_hash_table;
+	hashmap<Key, typename double_list<value_type>::iterator, Hash, Equal> hash_map;
+public:
 	class const_iterator;
 	class iterator{
 	public:
-    	/**
-         * elements
-         * add whatever you want
-        */
-    // --------------------------
-		iterator(){
+		typename double_list<value_type>::iterator it;
+		iterator(){}
+		iterator(typename double_list<value_type>::iterator it) : it(it) {}
+		iterator(const iterator &other): it(other.it) {}
+		~iterator(){}
+		iterator operator++(int) {
+			iterator tmp=*this;
+			it++;
+			return tmp;
+		} 
+		iterator &operator++() {
+			it++;
+			return *this;
 		}
-		iterator(const iterator &other){
+		iterator operator--(int) {
+			iterator tmp=*this;
+			it--;
+			return tmp;
+		} 
+		iterator &operator--() {
+			it--;
+			return *this;
 		}
-		~iterator(){
-		}
-
-		/**
-		 * iter++
-		 */
-		iterator operator++(int) {}
-		/**
-		 * ++iter
-		 */
-		iterator &operator++() {}
-		/**
-		 * iter--
-		 */
-		iterator operator--(int) {}
-		/**
-		 * --iter
-		 */
-		iterator &operator--() {}
-
-		/**
-		 * if the iter didn't point to a value
-		 * throw "star invalid"
-		*/
-		value_type &operator*() const {
-		}
-		value_type *operator->() const noexcept {
-		}
-
-		/**
-		 * operator to check whether two iterators are same (pointing to the same memory).
-		 */
-		bool operator==(const iterator &rhs) const {}
-		bool operator!=(const iterator &rhs) const {}
-		bool operator==(const const_iterator &rhs) const {}
-		bool operator!=(const const_iterator &rhs) const {}
+		value_type &operator*() const {	return *it;	} 
+		value_type *operator->() const noexcept {return &(*it);	}
+		bool operator==(const iterator &rhs) const {return it==rhs.it;}
+		bool operator!=(const iterator &rhs) const {return it!=rhs.it;}
+		bool operator==(const const_iterator &rhs) const {return it==rhs.it;}
+		bool operator!=(const const_iterator &rhs) const {return it!=rhs.it;}
 	};
- 
 	class const_iterator {
-		public:
-        	/**
-             * elements
-             * add whatever you want
-            */
-    // --------------------------   
-		const_iterator() {
+	public:
+		typename double_list<value_type>::iterator it;
+		const_iterator() {}
+		const_iterator(typename double_list<value_type>::iterator it) : it(it) {}
+		const_iterator(const iterator &other): it(other.it){}
+		const_iterator operator++(int) {
+			const_iterator tmp=*this;
+			it++;
+			return tmp;
 		}
-		const_iterator(const iterator &other) {
+		const_iterator &operator++() {
+			it++;
+			return *this;
 		}
-
-		/**
-		 * iter++
-		 */
-		const_iterator operator++(int) {}
-		/**
-		 * ++iter
-		 */
-		const_iterator &operator++() {}
-		/**
-		 * iter--
-		 */
-		const_iterator operator--(int) {}
-		/**
-		 * --iter
-		 */
-		const_iterator &operator--() {}
-
-		/**
-		 * if the iter didn't point to a value
-		 * throw 
-		*/
-		const value_type &operator*() const {
+		const_iterator operator--(int) {
+			const_iterator tmp=*this;
+			it--;
+			return tmp;
 		}
-		const value_type *operator->() const noexcept {
+		const_iterator &operator--() {
+			it--;
+			return *this;
 		}
-
-		/**
-		 * operator to check whether two iterators are same (pointing to the same memory).
-		 */
-		bool operator==(const iterator &rhs) const {}
-		bool operator!=(const iterator &rhs) const {}
-		bool operator==(const const_iterator &rhs) const {}
-		bool operator!=(const const_iterator &rhs) const {}
+		const value_type &operator*() const {return *it;}
+		const value_type *operator->() const noexcept {	return &(*it);} 
+		bool operator==(const iterator &rhs) const {return it==rhs.it;}
+		bool operator!=(const iterator &rhs) const {return it!=rhs.it;}
+		bool operator==(const const_iterator &rhs) const {return it==rhs.it;}
+		bool operator!=(const const_iterator &rhs) const {return it!=rhs.it;}
 	};
- 
-	linked_hashmap() {
-	}
-	linked_hashmap(const linked_hashmap &other){
+	linked_hashmap() {}
+	linked_hashmap(const linked_hashmap &other): hash_map(other.hash_map){
+		for(auto it=other.linked_hash_table.begin();it!=other.linked_hash_table.end();it++)
+			linked_hash_table.insert_tail(*it);
 	}
 	~linked_hashmap() {
+		linked_hash_table.clear();
+		hash_map.clear();
 	}
 	linked_hashmap & operator=(const linked_hashmap &other) {
+		if(this != &other){
+			hash_map = other.hash_map;
+			linked_hash_table.clear();
+			for(auto it=other.linked_hash_table.begin();it!=other.linked_hash_table.end();it++)
+				linked_hash_table.insert_tail(*it);
+		}
+		return *this;
 	}
-
- 	/**
-	 * return the value connected with the Key(O(1))
-	 * if the key not found, throw 
-	*/
 	T & at(const Key &key) {
+        auto it = hash_map.find(key);
+        if (it == hash_map.end()) throw std::out_of_range("Key not found");
+        return it->second->second;
 	}
 	const T & at(const Key &key) const {
+    	auto it = hash_map.find(key);
+        if (it == hash_map.end()) throw std::out_of_range("Key not found");
+        return it->second->second;
 	}
 	T & operator[](const Key &key) {
+        auto it = hash_map.find(key);
+        if (it == hash_map.end()) throw std::out_of_range("Key not found");
+        return it->second->second;
 	}
 	const T & operator[](const Key &key) const {
+        auto it = hash_map.find(key);
+        if (it == hash_map.end()) throw std::out_of_range("Key not found");
+        return it->second->second;
 	}
-
-	/**
-	 * return an iterator point to the first 
-	 * inserted and existed element
-	 */
-	iterator begin() {
-	}
-	const_iterator cbegin() const {
-	}
-    /**
-	 * return an iterator after the last inserted element
-	 */
-	iterator end() {
-	}
-	const_iterator cend() const {
-	}
-  	/**
-	 * if didn't contain anything, return true, 
-	 * otherwise false.
-	 */
-	bool empty() const {
-	}
-
+	iterator begin() {	return iterator(linked_hash_table.begin());	}
+	const_iterator cbegin() const {	return const_iterator(linked_hash_table.begin());}
+	iterator end() {return iterator(linked_hash_table.end());}
+	const_iterator cend() const {return const_iterator(linked_hash_table.end());}
+	bool empty() const {return linked_hash_table.empty();	}
     void clear(){
+		hash_map.clear();
+		linked_hash_table.clear();
 	}
-
-	size_t size() const {
-	}
- 	/**
-	 * insert the value_piar
-	 * if the key of the value_pair exists in the map
-	 * update the value instead of adding a new element，
-     * then the order of the element moved from inner of the 
-     * list to the head of the list
-	 * and return false
-	 * if the key of the value_pair doesn't exist in the map
-	 * add a new element and return true
-	*/
+	size_t size() const {return linked_hash_table.size();}
 	pair<iterator, bool> insert(const value_type &value) {
+		auto it = hash_map.find(value.first);
+		if(it!=hash_map.end()){
+			linked_hash_table.erase(it->second);
+			linked_hash_table.insert_tail(value);
+			auto new_pos = linked_hash_table.get_tail();
+        	it->second = new_pos;
+    	    return {iterator(new_pos), false};
+		}
+		else{
+			linked_hash_table.insert_tail(value);
+			auto lit = linked_hash_table.get_tail();
+        	hash_map.insert({value.first, lit});
+        	return {iterator(lit), true};
+		}
 	}
- 	/**
-	 * erase the value_pair pointed by the iterator
-	 * if the iterator points to nothing
-	 * throw 
-	*/
 	void remove(iterator pos) {
+		if(pos==end()) throw std::out_of_range("Key not found");
+		hash_map.remove(pos->first);
+		linked_hash_table.erase(pos.it);
 	}
-	/**
-	 * return how many value_pairs consist of key
-	 * this should only return 0 or 1
-	*/
-	size_t count(const Key &key) const {
+	size_t count(const Key &key) {
+		auto it = hash_map.find(key);
+		if(it==hash_map.end())
+			return 0;
+		return 1;
 	}
-	/**
-	 * find the iterator points at the value_pair
-	 * which consist of key
-	 * if not find, return the iterator 
-	 * point at nothing
-	*/
 	iterator find(const Key &key) {
+		auto it = hash_map.find(key);
+		if(it==hash_map.end()) return end();
+		return iterator(it->second);
 	}
-
 };
 
 class lru{
     using lmap = sjtu::linked_hashmap<Integer,Matrix<int>,Hash,Equal>;
     using value_type = sjtu::pair<const Integer, Matrix<int> >;
+
+	size_t capacity;
+	lmap hash_map;
 public:
-    lru(int size){
+    lru(size_t size): capacity(size){}
+    ~lru(){}
+
+    void save(const value_type &v) {
+		if (hash_map.count(v.first)) {
+    		hash_map.remove(hash_map.find(v.first));
+    	}
+    	if (hash_map.size() >= capacity) {
+        	auto oldest = hash_map.begin();
+        	hash_map.remove(oldest);
+    	}
+    	hash_map.insert(v);
     }
-    ~lru(){
+    Matrix<int>* get(const Integer &v) {
+		auto it=hash_map.find(v);
+		if(it!=hash_map.end()) {
+			auto value = it->second;
+			hash_map.remove(it);
+			hash_map.insert({v,value});
+			return &(hash_map.find(v)->second);
+		}
+		return nullptr;
     }
-    /**
-     * save the value_pair in the memory
-     * delete something in the memory if necessary
-    */
-    void save(const value_type &v) const{
-    }
-    /**
-     * return a pointer contain the value
-    */
-    Matrix<int>* get(const Integer &v) const{
-    }
-    /**
-     * just print everything in the memory
-     * to debug or test.
-     * this operation follows the order, but don't
-     * change the order.
-    */
     void print(){
+		for (auto it = hash_map.begin(); it != hash_map.end(); ++it) {
+        	std::cout << it->first.val << " " << it->second << std::endl;
+    	}
     }
 };
-}
+};
 
 #endif
